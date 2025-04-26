@@ -1,0 +1,45 @@
+[0.000] initConfigParams():  Configuration flags start
+[0.000] initConfigParams():   external-init                  false
+[0.000] initConfigParams():   pend-halt-timeout              (null)
+[0.000] initConfigParams():   halt                           false
+[0.000] initConfigParams():   config-file                    ""
+[0.000] initConfigParams():   persistent                     false
+[0.000] initConfigParams():  +log-file                       "G:\Electronics Projects\MicrophoneArray\INMP441 Interface\Debug\st-link_gdbserver_log.txt"
+[0.000] initConfigParams():  +log-level                      31
+[0.000] initConfigParams():  +port-number                    61234
+[0.000] initConfigParams():  +verbose                        true
+[0.000] initConfigParams():   refresh-delay                  15
+[0.000] initConfigParams():  +verify                         true
+[0.001] initConfigParams():  +swd                            true
+[0.001] initConfigParams():   swo-port                       61234
+[0.001] initConfigParams():   cpu-clock                      8000000
+[0.001] initConfigParams():   swo-clock-div                  128
+[0.001] initConfigParams():  +initialize-reset               true
+[0.001] initConfigParams():   debuggers                      false
+[0.001] initConfigParams():   serial-number                  ""
+[0.001] initConfigParams():  +apid                           0
+[0.001] initConfigParams():   attach                         false
+[0.001] initConfigParams():   shared                         false
+[0.001] initConfigParams():   erase-all                      false
+[0.001] initConfigParams():   memory-map                     ""
+[0.001] initConfigParams():   ext-memory-loaders             false
+[0.001] initConfigParams():   extload_init                   (null)
+[0.001] initConfigParams():   extload                        (null)
+[0.001] initConfigParams():  +stm32cubeprogrammer-path       "C:\ST\STM32CubeIDE_1.18.1\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.100.202412061334\tools\bin"
+[0.001] initConfigParams():   temp-path                      ""
+[0.001] initConfigParams():   preserve-temps                 false
+[0.001] initConfigParams():   frequency                      0
+[0.001] initConfigParams():   licenses                       false
+[0.001] initConfigParams():   ignore-rest                    false
+[0.001] initConfigParams():   version                        false
+[0.001] initConfigParams():   help                           false
+[0.001] initConfigParams():  Configuration flags end
+[0.001] init():  STMicroelectronics ST-LINK GDB server. Version 7.10.0
+Copyright (c) 2025, STMicroelectronics. All rights reserved.
+[0.008] openDevice():  COM frequency = 4000 kHz
+[0.008] openDevice():  Target connection mode: Under reset
+[0.036] readFromTarget():  Reading ROM table for AP 0 @0xe00fffd0
+[0.039] initContext():  Failed to CPU details
+[0.039] initServerContext():  
+Error in initializing ST-LINK device.
+Reason: [0.039] initServerContext():  Unknown. Please check power and cabling to target.
