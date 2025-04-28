@@ -48,24 +48,26 @@ I2S_HandleTypeDef hi2s2;
 DMA_HandleTypeDef hdma_spi2_rx;
 
 UART_HandleTypeDef huart2;
-DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 #define DMA_BUFFER_SIZE 256
 #define HALF_BUFFER_SIZE (DMA_BUFFER_SIZE/2)
 
-uint32_t i2s_dma_buffer[DMA_BUFFER_SIZE];
+static uint16_t i2s_dma_buffer[DMA_BUFFER_SIZE * 2];
 int32_t processed_data[HALF_BUFFER_SIZE];
 
 #define ITM_STIM_U8(n)  (0xE0000000 + (n<<4))
 #define ITM_PORT0_U8(addr)  (*((volatile uint8_t *)(addr)))
+#define ITM_PORT0_CH0()   ITM_PORT0_U8( ITM_STIM_U8(0) )
 
 /* Flags */
 volatile bool buffer0_ready = false;
 volatile bool buffer1_ready = false;
 
 /* function prototype */
-void send_buffer_over_uart(int offset);
+void print_dma_bits(int offset, int count2);
+void print_processed_bits(int offset, int count);
+void send_buffer_over_uart(void);
 
 /* Peripheral handles (from CubeMX) */
 extern I2S_HandleTypeDef hi2s2;
@@ -127,27 +129,28 @@ int main(void)
 	HAL_MAX_DELAY);
 
 	/* 3) Start I2S → DMA in circular mode */
-	HAL_I2S_Receive_DMA(&hi2s2, (uint16_t*) i2s_dma_buffer,
+	HAL_I2S_Receive_DMA(&hi2s2, i2s_dma_buffer,
 	DMA_BUFFER_SIZE * 2);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	/* ... Init ... */
+	HAL_I2S_Receive_DMA(&hi2s2, i2s_dma_buffer, DMA_BUFFER_SIZE * 2);
+
 	while (1) {
-		if (buffer0_ready) {
-			buffer0_ready = false;
-			send_buffer_over_uart(0);
-		}
 		if (buffer1_ready) {
 			buffer1_ready = false;
-			send_buffer_over_uart(HALF_BUFFER_SIZE);
+			// Send the binary data stored in processed_data
+			send_buffer_over_uart();
+			print_processed_bits(HALF_BUFFER_SIZE, 5);
 		}
+	}
 
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	}
   /* USER CODE END 3 */
 }
 
@@ -247,7 +250,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
+  huart2.Init.BaudRate = 921600;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
@@ -259,7 +262,6 @@ static void MX_USART2_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART2_Init 2 */
-	__HAL_LINKDMA(&huart2, hdmatx, hdma_usart2_tx);
   /* USER CODE END USART2_Init 2 */
 
 }
@@ -277,9 +279,6 @@ static void MX_DMA_Init(void)
   /* DMA1_Stream3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
-  /* DMA1_Stream6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
 
 }
 
@@ -323,54 +322,71 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void print_dma_bits(int offset, int count2) {
+	for (int i = 0; i < count2; ++i) {
+		uint32_t raw = i2s_dma_buffer[offset + i];
+		// MSB first
+		for (int b = 31; b >= 0; --b) {
+			uint8_t c = ((raw >> b) & 1) ? '1' : '0';
+			ITM_PORT0_CH0() = c;
+			HAL_Delay(1);            // ~1 ms per bit; slow enough to see it
+		}
+		// line break after each word
+		ITM_PORT0_CH0() = '\r';
+		ITM_PORT0_CH0() = '\n';
+		HAL_Delay(5);
+	}
+}
+void print_processed_bits(int offset, int count) {
+// For each sample in the half-buffer
+	for (int i = 0; i < count; ++i) {
+		int32_t sample = processed_data[offset + i];
 
-void send_buffer_over_uart(int offset)
-{
-    char line[64];
-    int frames = HALF_BUFFER_SIZE / 2;  // 128 words / 2 = 64 frames
-
-    for (int j = 0; j < frames; j++) {
-        uint32_t raw_left  = i2s_dma_buffer[offset + 2*j    ];
-        uint32_t raw_right = i2s_dma_buffer[offset + 2*j + 1];
-
-        // strip I2S dummy bit and sign-extend 23 data bits
-        int32_t bit24_left  = ((int32_t)(raw_left  << 9)) >> 9;
-        int32_t bit24_right = ((int32_t)(raw_right << 9)) >> 9;
-
-        int len = snprintf(line, sizeof(line),
-            "%lu,%lu,%ld,%ld\r\n",
-            (unsigned long)raw_left,
-            (unsigned long)raw_right,
-            (long)      bit24_left,
-            (long)      bit24_right
-        );
-        HAL_UART_Transmit(&huart2, (uint8_t*)line, len, HAL_MAX_DELAY);
-    }
-
-    HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
+		// Print bits 23 down to 0 (MSB of 24-bit word first)
+		for (int b = 23; b >= 0; --b) {
+			uint8_t c = ((sample >> b) & 1) ? '1' : '0';
+			ITM_PORT0_CH0() = c;
+			HAL_Delay(1);
+		}
+		// CRLF after each sample
+		ITM_PORT0_CH0() = '\r';
+		ITM_PORT0_CH0() = '\n';
+		HAL_Delay(5);
+	}
 }
 
-/* I2S half-buffer ISR: fill processed_data and flag buffer0_ready */
-void HAL_I2S_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
-{
-    if (hi2s->Instance == SPI2) {
-        for (int i = 0; i < HALF_BUFFER_SIZE; i++) {
-            processed_data[i] = ((int32_t)(i2s_dma_buffer[i] << 8)) >> 8;
-        }
-        buffer0_ready = true;
-    }
+void send_buffer_over_uart(void) { // No offset argument
+
+// Calculate the total number of *bytes* to send
+// We send the entire content of processed_data (128 * int32_t)
+	uint32_t bytes_to_send = HALF_BUFFER_SIZE * sizeof(int32_t); // 128 * 4 = 512 bytes
+
+// Transmit the raw binary data directly from the processed_data buffer
+// Cast the int32_t* pointer to the uint8_t* needed by HAL_UART_Transmit
+	HAL_UART_Transmit(&huart2, (uint8_t*) processed_data, // Pointer to the data buffer
+			bytes_to_send,           // Total number of bytes
+			HAL_MAX_DELAY);          // Timeout
+
+	HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
 }
 
-/* I2S full-buffer ISR: fill processed_data and flag buffer1_ready */
-void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s)
-{
-    if (hi2s->Instance == SPI2) {
-        for (int i = 0; i < HALF_BUFFER_SIZE; i++) {
-            processed_data[i] =
-                ((int32_t)(i2s_dma_buffer[i + HALF_BUFFER_SIZE] << 8)) >> 8;
-        }
-        buffer1_ready = true;
-    }
+/* I2S full-buffer ISR: process second 128 samples */
+void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s) {
+	if (hi2s->Instance == SPI2) {
+		for (int s = 0; s < HALF_BUFFER_SIZE; ++s) { // Loop 128 times
+			// Read from SECOND half of i2s_dma_buffer
+			uint16_t lo = ((uint16_t*) i2s_dma_buffer)[2
+					* (s + HALF_BUFFER_SIZE)];
+			uint16_t hi = ((uint16_t*) i2s_dma_buffer)[2
+					* (s + HALF_BUFFER_SIZE) + 1];
+			uint32_t raw = ((uint32_t) hi << 16) | lo;
+			// Store sign-extended result in processed_data[0..127]
+			processed_data[s] = ((int32_t) (raw << 8)) >> 8;
+//			print_dma_bits(HALF_BUFFER_SIZE, s);
+//			print_processed_bits(HALF_BUFFER_SIZE, s);
+		}
+		buffer1_ready = true;
+	}
 }
 /* USER CODE END 4 */
 
@@ -382,7 +398,7 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
-	//__disable_irq();
+//__disable_irq();
 	__disable_irq();
 	HAL_GPIO_WritePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin, GPIO_PIN_SET); // Turn on LED for error
 	while (1) {
